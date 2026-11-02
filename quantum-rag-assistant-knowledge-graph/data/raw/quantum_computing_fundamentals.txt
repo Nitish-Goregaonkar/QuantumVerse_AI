@@ -1,0 +1,202 @@
+Quantum Computing — Sample Knowledge Base Notes
+
+==========================================================
+1. INTRODUCTION TO QUANTUM COMPUTING
+==========================================================
+
+Quantum computing is a type of computation that harnesses quantum mechanical 
+phenomena such as superposition, entanglement, and interference to process 
+information in fundamentally different ways than classical computers.
+
+Classical computers use bits — binary digits that are either 0 or 1. Quantum 
+computers use quantum bits, or qubits, which can exist in a superposition of 
+both 0 and 1 simultaneously until measured.
+
+The power of quantum computing lies not in doing things faster than classical 
+computers, but in doing things differently — tackling problems that are 
+intractable for even the most powerful supercomputers.
+
+==========================================================
+2. QUBITS AND SUPERPOSITION
+==========================================================
+
+A qubit is the fundamental unit of quantum information. Unlike a classical bit, 
+which is deterministically 0 or 1, a qubit exists as a linear combination 
+(superposition) of |0⟩ and |1⟩:
+
+    |ψ⟩ = α|0⟩ + β|1⟩
+
+where α and β are complex probability amplitudes, and |α|² + |β|² = 1.
+
+When we measure a qubit, it collapses to |0⟩ with probability |α|² or |1⟩ 
+with probability |β|². The act of measurement itself destroys the superposition.
+
+Physical implementations of qubits include:
+- Superconducting circuits (used by IBM, Google)
+- Trapped ions (used by IonQ, Honeywell)
+- Photons (optical quantum computing)
+- Topological qubits (Microsoft research)
+
+==========================================================
+3. THE BLOCH SPHERE
+==========================================================
+
+The state of a single qubit can be visualized as a point on the surface of a 
+unit sphere called the Bloch sphere. The north pole represents |0⟩, the south 
+pole represents |1⟩, and all points on the surface represent valid qubit states.
+
+The general qubit state in Bloch sphere notation:
+
+    |ψ⟩ = cos(θ/2)|0⟩ + e^(iφ)sin(θ/2)|1⟩
+
+where θ is the polar angle (0 to π) and φ is the azimuthal angle (0 to 2π).
+
+Quantum gates correspond to rotations of the Bloch sphere.
+
+==========================================================
+4. QUANTUM ENTANGLEMENT
+==========================================================
+
+Quantum entanglement is a phenomenon where two or more particles become 
+correlated in such a way that the quantum state of each particle cannot be 
+described independently — even when separated by large distances.
+
+A classic example is the Bell state (maximally entangled state):
+
+    |Φ+⟩ = (1/√2)(|00⟩ + |11⟩)
+
+When two qubits are in this state:
+- Measuring the first qubit as 0 instantly means the second is also 0
+- Measuring the first qubit as 1 instantly means the second is also 1
+- This correlation exists regardless of the physical distance between them
+
+Einstein famously called this "spooky action at a distance." Entanglement is 
+a critical resource for quantum teleportation, superdense coding, and 
+quantum key distribution.
+
+==========================================================
+5. QUANTUM GATES
+==========================================================
+
+Quantum gates are the quantum equivalent of logic gates. Unlike classical 
+gates, quantum gates are always reversible (unitary).
+
+Single-Qubit Gates:
+- Pauli-X (NOT gate): Flips |0⟩ to |1⟩ and vice versa
+- Pauli-Y: Rotation around Y-axis of Bloch sphere
+- Pauli-Z: Flips the phase of |1⟩
+- Hadamard (H): Creates superposition from basis states
+  H|0⟩ = (|0⟩ + |1⟩)/√2
+  H|1⟩ = (|0⟩ - |1⟩)/√2
+- S gate: Phase gate (90° rotation)
+- T gate: π/8 gate (45° rotation)
+
+Two-Qubit Gates:
+- CNOT (Controlled-NOT): Flips target qubit if control qubit is |1⟩
+- CZ (Controlled-Z): Applies Z gate if both qubits are |1⟩
+- SWAP: Exchanges the states of two qubits
+- Toffoli (CCNOT): Controlled-controlled-NOT (universal gate)
+
+The Hadamard and CNOT gates together can create entanglement and are 
+sufficient for universal quantum computation.
+
+==========================================================
+6. QUANTUM CIRCUITS
+==========================================================
+
+Quantum algorithms are expressed as quantum circuits — sequences of quantum 
+gates applied to qubits. A quantum circuit reads from left to right, with 
+each line representing a qubit wire.
+
+A simple Bell state circuit:
+1. Start with |00⟩
+2. Apply Hadamard to qubit 1: (|0⟩ + |1⟩)/√2 ⊗ |0⟩
+3. Apply CNOT with qubit 1 as control: (|00⟩ + |11⟩)/√2
+
+This two-gate circuit creates maximal entanglement from two unentangled qubits.
+
+==========================================================
+7. QUANTUM ALGORITHMS
+==========================================================
+
+Several quantum algorithms offer exponential speedups over classical counterparts:
+
+Shor's Algorithm (1994):
+- Factors large integers in polynomial time
+- Classically: requires exponential time (basis of RSA encryption security)
+- Quantum: O((log N)³) time using quantum Fourier transform
+- Implications: threatens current public-key cryptography
+
+Grover's Algorithm (1996):
+- Searches an unsorted database of N items in O(√N) operations
+- Classical: O(N) operations required
+- Provides quadratic speedup — useful for optimization, breaking symmetric keys
+
+Quantum Fourier Transform (QFT):
+- Quantum analog of the discrete Fourier transform
+- Exponentially faster than classical FFT
+- Core subroutine in Shor's algorithm and quantum phase estimation
+
+Variational Quantum Eigensolver (VQE):
+- Hybrid classical-quantum algorithm for quantum chemistry
+- Finds ground state energies of molecular Hamiltonians
+- Suitable for near-term NISQ devices
+
+==========================================================
+8. DECOHERENCE AND QUANTUM NOISE
+==========================================================
+
+Decoherence is the process by which a quantum system loses its quantum 
+properties due to interaction with the environment. It is one of the 
+primary challenges in building practical quantum computers.
+
+Sources of decoherence:
+- Thermal fluctuations
+- Electromagnetic interference
+- Material defects in qubit substrates
+- Measurement backaction
+
+Decoherence time (T1, T2):
+- T1 (relaxation time): How long a qubit holds an excited state
+- T2 (dephasing time): How long quantum phase information is preserved
+- Modern superconducting qubits: T1, T2 ~ microseconds to milliseconds
+
+Quantum Error Correction (QEC):
+- Encodes logical qubits in many physical qubits
+- Detects and corrects errors without measuring the quantum state
+- Shor code: Encodes 1 logical qubit in 9 physical qubits
+- Surface code: Most practical error correction scheme (requires ~1000:1 ratio)
+
+==========================================================
+9. QUANTUM SUPREMACY AND NISQ ERA
+==========================================================
+
+Quantum supremacy (now called "quantum advantage") refers to a quantum 
+computer performing a specific task faster than any classical computer.
+
+Google's Sycamore (2019):
+- 53 superconducting qubits
+- Performed random circuit sampling in 200 seconds
+- Google claimed classical simulation would take 10,000 years
+- IBM disputed: estimated 2.5 days on a classical supercomputer
+
+NISQ (Noisy Intermediate-Scale Quantum) devices:
+- 50–1000 qubits, no error correction
+- Sufficient for quantum advantage in narrow tasks
+- Not yet fault-tolerant for general quantum computation
+- Current focus: variational algorithms, quantum simulation
+
+==========================================================
+10. QUANTUM CRYPTOGRAPHY
+==========================================================
+
+Quantum Key Distribution (QKD):
+- Uses quantum mechanics to distribute cryptographic keys securely
+- BB84 protocol (Bennett & Brassard, 1984): First QKD protocol
+- Any eavesdropping disturbs the quantum states, detectable by parties
+- Unconditional security based on laws of physics, not computational hardness
+
+Post-Quantum Cryptography (PQC):
+- Classical cryptographic algorithms resistant to quantum attacks
+- NIST PQC Standardization (2022): Selected CRYSTALS-Kyber, CRYSTALS-Dilithium
+- Required because Shor's algorithm breaks RSA, ECC, and Diffie-Hellman

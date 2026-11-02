@@ -1,0 +1,1460 @@
+<!DOCTYPE html>
+<html lang="en" class="dark h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum RAG Knowledge Graph Assistant</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        quantum: {
+                            50: '#f0f9ff', 100: '#e0f2fe', 400: '#38bdf8', 500: '#0ea5e9', 600: '#0284c7',
+                            800: '#0f172a', 900: '#090d16', 950: '#05070c',
+                        },
+                        accent: {
+                            cyan: '#06b6d4', purple: '#a855f7', emerald: '#10b981', rose: '#f43f5e', amber: '#f59e0b'
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'glow': 'glow 2s ease-in-out infinite alternate',
+                        'fade-in': 'fadeIn 0.35s ease-out',
+                    },
+                    keyframes: {
+                        glow: {
+                            '0%': { boxShadow: '0 0 5px rgba(56, 189, 248, 0.2)' },
+                            '100%': { boxShadow: '0 0 20px rgba(56, 189, 248, 0.6)' }
+                        },
+                        fadeIn: {
+                            '0%': { opacity: '0', transform: 'translateY(6px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Markdown + math rendering for LLM answers -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        code, pre, .font-mono { font-family: 'JetBrains Mono', monospace; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+        ::-webkit-scrollbar-thumb { background: rgba(51, 65, 85, 0.8); border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.5); }
+        .glass-panel { background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(51, 65, 85, 0.5); }
+        .glass-card { background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(8px); border: 1px solid rgba(51, 65, 85, 0.4); }
+        /* Rendered markdown inside answers */
+        .md p { margin: 0 0 0.7rem; }
+        .md p:last-child { margin-bottom: 0; }
+        .md ul { list-style: disc; padding-left: 1.25rem; margin: 0 0 0.7rem; }
+        .md ol { list-style: decimal; padding-left: 1.25rem; margin: 0 0 0.7rem; }
+        .md li { margin: 0.15rem 0; }
+        .md h1, .md h2, .md h3, .md h4 { font-weight: 700; color: #f1f5f9; margin: 0.9rem 0 0.4rem; }
+        .md code { background: rgba(15,23,42,0.9); padding: 0.1rem 0.35rem; border-radius: 0.3rem; font-size: 0.78rem; color: #7dd3fc; }
+        .md pre { background: #05070c; border: 1px solid #1e293b; padding: 0.75rem; border-radius: 0.6rem; overflow-x: auto; margin: 0 0 0.7rem; }
+        .md pre code { background: transparent; padding: 0; }
+        .md table { border-collapse: collapse; margin-bottom: 0.7rem; font-size: 0.8rem; }
+        .md th, .md td { border: 1px solid #334155; padding: 0.3rem 0.6rem; }
+        .md blockquote { border-left: 3px solid #38bdf8; padding-left: 0.75rem; color: #94a3b8; margin: 0 0 0.7rem; }
+        .md .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.25rem 0; }
+        .md a { color: #38bdf8; text-decoration: underline; }
+        .generated-diagram { margin: 1rem 0; padding: .75rem; border: 1px solid rgba(56,189,248,.25); border-radius: .85rem; background: rgba(15,23,42,.72); }
+        .generated-diagram img { display:block; width:100%; max-width:760px; height:auto; margin:auto; border-radius:.5rem; }
+        .generated-diagram figcaption { color:#94a3b8; font-size:.72rem; margin-top:.5rem; text-align:center; }
+    </style>
+</head>
+<body class="bg-quantum-950 text-slate-100 h-full flex flex-col overflow-hidden select-none">
+
+    <!-- Top Navigation Bar -->
+    <header class="h-14 border-b border-slate-800 bg-quantum-900/90 backdrop-blur flex items-center justify-between px-4 z-20">
+        <div class="flex items-center space-x-3">
+            <button id="sidebar-toggle" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition">
+                <i data-lucide="menu" class="w-5 h-5"></i>
+            </button>
+            <div class="flex items-center space-x-2.5">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-quantum-400 via-accent-cyan to-accent-purple p-0.5 flex items-center justify-center shadow-lg shadow-quantum-500/20">
+                    <div class="w-full h-full bg-quantum-950 rounded-[7px] flex items-center justify-center">
+                        <i data-lucide="atom" class="w-5 h-5 text-quantum-400 animate-pulse-slow"></i>
+                    </div>
+                </div>
+                <div>
+                    <span class="font-bold text-sm tracking-wide bg-gradient-to-r from-quantum-400 via-sky-200 to-accent-purple bg-clip-text text-transparent">QUANTUM RAG</span>
+                    <span class="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-quantum-500/10 text-quantum-400 border border-quantum-400/20 ml-2">v2.5 Graph-Engine</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Global Status Indicators & Controls -->
+        <div class="flex items-center space-x-4">
+            <div class="hidden md:flex items-center space-x-3 text-xs border-r border-slate-800 pr-4">
+                <div class="flex items-center space-x-1.5" title="FastAPI Engine Connection Status">
+                    <span id="api-dot-ping" class="w-2 h-2 rounded-full bg-slate-500"></span>
+                    <span id="api-dot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+                    <span class="text-slate-400 font-mono">FastAPI: <span id="api-status-text" class="text-slate-400 font-semibold">connecting…</span></span>
+                </div>
+                <div class="flex items-center space-x-1.5 text-slate-400 font-mono">
+                    <i data-lucide="database" class="w-3.5 h-3.5 text-accent-cyan"></i>
+                    <span>Graph Nodes: <span id="stat-total-nodes" class="text-slate-200 font-semibold">–</span></span>
+                </div>
+                <div class="flex items-center space-x-1.5 text-slate-400 font-mono">
+                    <i data-lucide="cpu" class="w-3.5 h-3.5 text-accent-purple"></i>
+                    <span>Vectors: <span id="stat-total-vectors" class="text-slate-200 font-semibold">–</span></span>
+                </div>
+            </div>
+
+            <!-- Action Controls -->
+            <div class="flex items-center space-x-2">
+                <button onclick="triggerApiLogModal()" class="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition relative" title="View API Logs">
+                    <i data-lucide="terminal" class="w-4 h-4"></i>
+                    <span id="api-log-badge" class="hidden absolute top-1 right-1 w-2 h-2 bg-quantum-400 rounded-full"></span>
+                </button>
+                <button onclick="resetSystemData()" class="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition" title="Reset chat & reload graph view">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </button>
+                <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-accent-purple to-quantum-400 p-0.5 cursor-pointer">
+                    <div class="w-full h-full rounded-full bg-quantum-900 flex items-center justify-center text-xs font-semibold text-quantum-400">QR</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- App Body Container -->
+    <div class="flex-1 flex overflow-hidden relative">
+
+        <!-- Sidebar Navigation -->
+        <aside id="sidebar" class="w-64 shrink-0 bg-quantum-900/95 border-r border-slate-800 flex flex-col justify-between transition-all duration-300 z-10">
+            <div class="p-3 space-y-4 overflow-y-auto min-h-0">
+                <div class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-3 pt-2 font-mono">Main Modules</div>
+                <nav class="space-y-1">
+                    <button onclick="switchTab('chat')" id="btn-tab-chat" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-quantum-500/10 text-quantum-400 font-medium border border-quantum-500/20 transition">
+                        <i data-lucide="message-square" class="w-4 h-4"></i>
+                        <span class="text-sm">RAG Chat AI</span>
+                    </button>
+                    <button onclick="switchTab('graph')" id="btn-tab-graph" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 font-medium transition">
+                        <i data-lucide="network" class="w-4 h-4"></i>
+                        <span class="text-sm">Knowledge Graph</span>
+                        <span class="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20">2D Canvas</span>
+                    </button>
+                    <button onclick="switchTab('docs')" id="btn-tab-docs" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 font-medium transition">
+                        <i data-lucide="folder-git-2" class="w-4 h-4"></i>
+                        <span class="text-sm">Document Vault</span>
+                        <span id="doc-count-badge" class="ml-auto text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-mono">0</span>
+                    </button>
+                </nav>
+
+                <section class="pt-2 border-t border-slate-800/80">
+                    <div class="flex items-center justify-between px-2 mb-2">
+                        <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider font-mono">Conversations</span>
+                        <button type="button" onclick="startNewConversation()" class="text-[11px] text-quantum-300 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-800" title="New chat">+ New</button>
+                    </div>
+                    <div id="conversation-list" class="max-h-56 overflow-y-auto space-y-1 pr-1" aria-label="Conversation history">
+                        <p class="text-[11px] text-slate-600 px-2 py-2">Your chats will appear here.</p>
+                    </div>
+                </section>
+
+                <div class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-3 pt-4 font-mono">RAG Hyperparameters</div>
+                <div class="space-y-3 px-3">
+                    <div>
+                        <div class="flex justify-between text-xs text-slate-400 mb-1">
+                            <span>Top-K Retrieval</span>
+                            <span id="val-top-k" class="font-mono text-quantum-400">8</span>
+                        </div>
+                        <input type="range" min="1" max="15" value="8" id="slider-top-k" oninput="document.getElementById('val-top-k').innerText=this.value" class="w-full accent-quantum-400 bg-slate-800 h-1.5 rounded-lg cursor-pointer">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs text-slate-400 mb-1">
+                            <span>Similarity Threshold</span>
+                            <span id="val-sim" class="font-mono text-quantum-400">0.30</span>
+                        </div>
+                        <input type="range" min="0.1" max="0.9" step="0.05" value="0.3" id="slider-sim" oninput="document.getElementById('val-sim').innerText=parseFloat(this.value).toFixed(2)" class="w-full accent-quantum-400 bg-slate-800 h-1.5 rounded-lg cursor-pointer">
+                    </div>
+                    <div class="pt-1">
+                        <label class="flex items-center justify-between text-xs text-slate-400 cursor-pointer">
+                            <span>Graph Enhanced Context</span>
+                            <input type="checkbox" id="toggle-graph-rag" checked class="rounded bg-slate-800 border-slate-700 text-quantum-500 focus:ring-0 cursor-pointer">
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FastAPI Endpoint Route Monitor -->
+            <div class="p-3 border-t border-slate-800 bg-quantum-950/40">
+                <div class="text-[10px] uppercase font-mono text-slate-500 mb-2 flex items-center justify-between">
+                    <span>FastAPI Route Monitor</span>
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-xs font-mono space-y-1.5 text-slate-400">
+                    <div class="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800/80">
+                        <span class="text-emerald-400 font-bold">POST</span>
+                        <span class="text-[11px] truncate w-32">/api/v1/chat/query</span>
+                    </div>
+                    <div class="flex items-center justify-between p-1.5 rounded bg-slate-900 border border-slate-800/80">
+                        <span class="text-accent-cyan font-bold">GET</span>
+                        <span class="text-[11px] truncate w-32">/api/v1/graph/nodes</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Work Area -->
+        <main class="flex-1 flex flex-col h-full bg-quantum-950 relative overflow-hidden min-w-0">
+
+            <!-- VIEW 1: AI CHAT WORKSPACE -->
+            <div id="view-chat" class="tab-view flex-1 flex flex-col h-full relative min-h-0">
+                <div id="chat-messages" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 max-w-4xl w-full mx-auto select-text">
+                    <!-- Bot Welcome Message -->
+                    <div class="flex items-start space-x-3 animate-fade-in">
+                        <div class="w-8 h-8 rounded-lg bg-quantum-500/20 border border-quantum-400/30 flex items-center justify-center text-quantum-400 shrink-0 mt-0.5">
+                            <i data-lucide="bot" class="w-4 h-4"></i>
+                        </div>
+                        <div class="flex-1 space-y-2">
+                            <div class="flex items-center space-x-2">
+                                <span class="text-xs font-semibold text-quantum-400">Quantum Intelligence Engine</span>
+                                <span class="text-[10px] text-slate-500 font-mono">System Ready</span>
+                            </div>
+                            <div class="glass-card p-4 rounded-2xl text-sm leading-relaxed text-slate-200 border border-slate-700/60 shadow-xl">
+                                Welcome to your <strong>Quantum RAG Knowledge Graph Workspace</strong>. I am synced with your vectorized documents and graph relationships.
+                                <br><br>
+                                You can ask questions about your documents, trigger hybrid vector-graph reasoning, or explore real-time knowledge extractions.
+                                <div class="mt-4 flex flex-wrap gap-2">
+                                    <button onclick="sendQuickPrompt('What is Quantum Entanglement in computing?')" class="text-xs bg-slate-800 hover:bg-slate-700 text-quantum-400 border border-slate-700 px-3 py-1.5 rounded-lg transition text-left">⚡ What is Quantum Entanglement?</button>
+                                    <button onclick="sendQuickPrompt('Summarize the uploaded documents and their key concepts.')" class="text-xs bg-slate-800 hover:bg-slate-700 text-accent-cyan border border-slate-700 px-3 py-1.5 rounded-lg transition text-left">📄 Summarize Vault Documents</button>
+                                    <button onclick="sendQuickPrompt('Show graph relationships between Superposition and Qubits.')" class="text-xs bg-slate-800 hover:bg-slate-700 text-accent-purple border border-slate-700 px-3 py-1.5 rounded-lg transition text-left">🕸️ Analyze Qubit Graph Links</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Input Form -->
+                <div class="p-4 bg-gradient-to-t from-quantum-950 via-quantum-950/90 to-transparent">
+                    <div class="max-w-4xl mx-auto">
+                        <form id="chat-form" class="glass-panel p-2 rounded-2xl border border-slate-700/80 shadow-2xl focus-within:border-quantum-400 transition-all flex flex-col space-y-2">
+                            <div id="chat-attached-files-container" class="hidden flex flex-wrap gap-2 px-2 pt-1"></div>
+
+                            <textarea id="chat-input" rows="2" maxlength="1000" placeholder="Ask a question or attach a document… (Enter to send, Shift+Enter for a new line)" class="w-full bg-transparent px-3 py-2 text-sm focus:outline-none text-slate-100 placeholder-slate-500 resize-none font-sans select-text"></textarea>
+
+                            <input type="file" id="chat-file-input" class="hidden" multiple accept=".pdf,.txt,.md,.docx,.pptx,.png,.jpg,.jpeg,.webp,.py,.js,.ts,.json,.csv,.yaml,.yml,.html,.css,.java,.c,.cpp,.h,.go,.rs,.sh,.log,.qasm" onchange="handleChatAttachmentsSelected(event)">
+                            <input type="file" id="chat-video-input" class="hidden" accept="video/mp4,video/webm,video/quicktime,video/x-matroska,.mp4,.webm,.mov,.mkv" onchange="handleVideoSelected(event)">
+
+                            <div class="flex items-center justify-between pt-1 border-t border-slate-800/80 px-2">
+                                <div class="flex items-center space-x-2 text-xs text-slate-400">
+                                    <button type="button" onclick="document.getElementById('chat-file-input').click()" class="p-1.5 rounded-lg text-slate-400 hover:text-quantum-400 hover:bg-slate-800 transition flex items-center space-x-1" title="Attach documents, images, or code files">
+                                        <i data-lucide="paperclip" class="w-4 h-4"></i><span class="text-[11px] font-medium">Attach</span>
+                                    </button>
+                                    <button type="button" onclick="document.getElementById('chat-video-input').click()" class="p-1.5 rounded-lg text-slate-400 hover:text-quantum-400 hover:bg-slate-800 transition flex items-center space-x-1" title="Upload a video and ask questions about its transcript">
+                                        <i data-lucide="video" class="w-4 h-4"></i><span class="text-[11px] font-medium">Video</span>
+                                    </button>
+                                    <div class="hidden" aria-hidden="true">
+                                        <select id="v3-doc-scope" multiple></select>
+                                        <button type="button" id="v3-global">Global knowledge base</button>
+                                        <input id="v3-debug" type="checkbox">
+                                        <button type="button" id="v3-compare">Compare</button>
+                                        <button type="button" id="v3-study">Study tools</button>
+                                        <span id="v3-scope-label">Global knowledge base</span>
+                                    </div>
+                                    <button type="button" id="v3-stop" disabled class="hidden px-2 py-1 rounded bg-rose-950 text-rose-300 border border-rose-800 text-xs">Stop</button>
+                                    <span class="flex items-center space-x-1 font-mono text-[11px] bg-slate-800 px-2 py-0.5 rounded">
+                                        <i data-lucide="zap" class="w-3 h-3 text-quantum-400"></i>
+                                        <span id="rag-mode-label">Hybrid RAG Active</span>
+                                    </span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+<button type="submit" id="btn-send-message" class="bg-gradient-to-r from-quantum-500 to-accent-cyan hover:from-quantum-600 hover:to-sky-500 text-quantum-950 font-bold px-4 py-1.5 rounded-xl text-xs transition flex items-center space-x-1.5 shadow-lg shadow-quantum-500/20 disabled:opacity-50 disabled:cursor-not-allowed">
+                                        <span>Query AI</span>
+                                        <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 2: INTERACTIVE KNOWLEDGE GRAPH CANVAS -->
+            <div id="view-graph" class="tab-view hidden flex-1 flex flex-col h-full relative overflow-hidden">
+                <div class="p-3 bg-quantum-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 z-10">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xs font-semibold text-slate-300">Filter Nodes:</span>
+                        <button onclick="toggleGraphFilter('all')" id="filter-all" class="px-2.5 py-1 rounded-lg text-xs font-medium bg-quantum-500/20 text-quantum-400 border border-quantum-500/30">All</button>
+                        <button onclick="toggleGraphFilter('Concept')" id="filter-Concept" class="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-400 hover:text-slate-200">Concepts</button>
+                        <button onclick="toggleGraphFilter('Quantum Entity')" id="filter-Quantum Entity" class="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-400 hover:text-slate-200">Quantum Entities</button>
+                        <button onclick="toggleGraphFilter('Document')" id="filter-Document" class="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-400 hover:text-slate-200">Documents</button>
+                        <span id="graph-shown-label" class="hidden lg:inline text-[11px] font-mono text-slate-500 pl-2"></span>
+                    </div>
+
+                    <div class="flex items-center space-x-2">
+                        <button onclick="openAddNodeModal()" class="px-3 py-1.5 bg-quantum-500/10 hover:bg-quantum-500/20 text-quantum-400 border border-quantum-500/30 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition">
+                            <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+                            <span>Add Custom Node</span>
+                        </button>
+                        <button onclick="recenterGraphCanvas()" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition" title="Reset Viewport Center">
+                            <i data-lucide="crosshair" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex-1 relative bg-quantum-950 cursor-grab active:cursor-grabbing overflow-hidden" id="canvas-container">
+                    <canvas id="graph-canvas" class="w-full h-full block"></canvas>
+                    <div id="graph-empty" class="hidden absolute inset-0 flex items-center justify-center text-sm text-slate-500 pointer-events-none">
+                        The knowledge graph is empty. Upload documents in the Document Vault to build it.
+                    </div>
+
+                    <!-- Graph Inspector -->
+                    <div id="graph-inspector" class="hidden absolute top-4 right-4 w-80 glass-panel rounded-2xl p-4 border border-slate-700/80 shadow-2xl z-20 space-y-3 select-text">
+                        <div class="flex items-center justify-between border-b border-slate-700/60 pb-2">
+                            <div class="flex items-center space-x-2 min-w-0">
+                                <span id="node-type-badge" class="px-2 py-0.5 rounded text-[10px] font-mono uppercase font-bold bg-quantum-500/20 text-quantum-400 border border-quantum-500/30 shrink-0">CONCEPT</span>
+                                <h4 id="node-title" class="font-bold text-sm text-slate-100 truncate w-40">–</h4>
+                            </div>
+                            <button onclick="closeGraphInspector()" class="text-slate-400 hover:text-slate-100">
+                                <i data-lucide="x" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                        <p id="node-description" class="text-xs text-slate-300 leading-relaxed max-h-40 overflow-y-auto">–</p>
+                        <div class="space-y-1.5 font-mono text-[11px]">
+                            <div class="flex justify-between text-slate-400">
+                                <span>Graph Node ID:</span>
+                                <span id="node-vec-id" class="text-accent-cyan">–</span>
+                            </div>
+                            <div class="flex justify-between text-slate-400">
+                                <span>Linked Chunks:</span>
+                                <span id="node-chunks" class="text-slate-200">–</span>
+                            </div>
+                            <div class="flex justify-between text-slate-400">
+                                <span>Connected Degrees:</span>
+                                <span id="node-degree" class="text-slate-200">–</span>
+                            </div>
+                        </div>
+                        <div class="pt-2 border-t border-slate-800 flex space-x-2">
+                            <button onclick="queryNodeInChat()" class="flex-1 py-1.5 bg-quantum-500 hover:bg-quantum-600 text-quantum-950 font-bold rounded-lg text-xs transition flex items-center justify-center space-x-1">
+                                <i data-lucide="message-square" class="w-3.5 h-3.5"></i>
+                                <span>Query Node AI</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="absolute bottom-4 left-4 glass-card px-3 py-2 rounded-xl text-[11px] text-slate-400 space-y-1 font-mono pointer-events-none border border-slate-800">
+                        <div>💡 <span class="text-slate-200">Drag nodes</span> to adjust physics</div>
+                        <div>🔍 <span class="text-slate-200">Scroll wheel</span> to Zoom, drag background to Pan</div>
+                        <div>👆 <span class="text-slate-200">Click node</span> for RAG metadata</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 3: DOCUMENT VAULT & RAG INDEX MANAGER -->
+            <div id="view-docs" class="tab-view hidden flex-1 flex flex-col h-full overflow-y-auto p-4 md:p-6 space-y-6 max-w-6xl w-full mx-auto">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="glass-card p-4 rounded-2xl border border-slate-800 flex items-center space-x-4">
+                        <div class="w-12 h-12 rounded-xl bg-quantum-500/10 border border-quantum-500/20 flex items-center justify-center text-quantum-400">
+                            <i data-lucide="file-text" class="w-6 h-6"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs text-slate-400 uppercase font-mono">Indexed Documents</div>
+                            <div class="text-xl font-bold text-slate-100" id="doc-stat-count">– Files</div>
+                        </div>
+                    </div>
+                    <div class="glass-card p-4 rounded-2xl border border-slate-800 flex items-center space-x-4">
+                        <div class="w-12 h-12 rounded-xl bg-accent-cyan/10 border border-accent-cyan/20 flex items-center justify-center text-accent-cyan">
+                            <i data-lucide="layers" class="w-6 h-6"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs text-slate-400 uppercase font-mono">Vector Chunks</div>
+                            <div class="text-xl font-bold text-slate-100" id="doc-stat-chunks">– Chunks</div>
+                        </div>
+                    </div>
+                    <div class="glass-card p-4 rounded-2xl border border-slate-800 flex items-center space-x-4">
+                        <div class="w-12 h-12 rounded-xl bg-accent-purple/10 border border-accent-purple/20 flex items-center justify-center text-accent-purple">
+                            <i data-lucide="sparkles" class="w-6 h-6"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs text-slate-400 uppercase font-mono">Extracted Graph Entities</div>
+                            <div class="text-xl font-bold text-slate-100" id="doc-stat-entities">– Entities</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Drag & Drop Uploader -->
+                <div class="glass-panel p-6 rounded-2xl border-2 border-dashed border-slate-700 hover:border-quantum-400 transition cursor-pointer text-center space-y-3 relative overflow-hidden group" id="drop-zone" onclick="document.getElementById('file-input').click()">
+                    <input type="file" id="file-input" class="hidden" multiple accept=".pdf,.txt,.md,.docx" onchange="handleFileSelect(event)">
+                    <div class="w-14 h-14 rounded-2xl bg-quantum-500/10 text-quantum-400 flex items-center justify-center mx-auto group-hover:scale-110 transition duration-300 border border-quantum-500/20">
+                        <i data-lucide="upload-cloud" id="upload-icon" class="w-7 h-7"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-semibold text-slate-200" id="upload-title">Upload Knowledge Documents</h3>
+                        <p class="text-xs text-slate-400 mt-1" id="upload-subtitle">Drag and drop PDF, DOCX, Markdown, or TXT files (max 25 MB each) to chunk and index into the Knowledge Graph</p>
+                    </div>
+                    <div class="text-[11px] font-mono text-quantum-400 bg-quantum-500/10 px-3 py-1 rounded-full w-max mx-auto border border-quantum-500/20">
+                        FastAPI Route: /api/v1/documents/upload
+                    </div>
+                </div>
+
+                <!-- Indexed Documents List -->
+                <div class="glass-card rounded-2xl border border-slate-800 overflow-hidden">
+                    <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+                        <h3 class="font-bold text-sm text-slate-200 flex items-center space-x-2">
+                            <i data-lucide="database" class="w-4 h-4 text-quantum-400"></i>
+                            <span>Indexed RAG Knowledge Base</span>
+                        </h3>
+                        <span id="docs-status-label" class="text-xs text-slate-400 font-mono">Status: Up-to-date</span>
+                    </div>
+                    <div id="document-list" class="divide-y divide-slate-800/60 max-h-[min(48vh,560px)] overflow-y-auto overscroll-contain" role="region" aria-label="Indexed documents"></div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="hidden fixed bottom-5 right-5 z-[60] max-w-sm glass-panel rounded-xl px-4 py-3 text-xs shadow-2xl select-text"></div>
+
+    <!-- MODAL 1: Add Node Modal -->
+    <div id="modal-add-node" class="hidden fixed inset-0 bg-quantum-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-md rounded-2xl p-6 border border-slate-700 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="font-bold text-base text-slate-100 flex items-center space-x-2">
+                    <i data-lucide="plus-circle" class="w-5 h-5 text-quantum-400"></i>
+                    <span>Add Knowledge Graph Entity</span>
+                </h3>
+                <button onclick="closeAddNodeModal()" class="text-slate-400 hover:text-slate-100"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <form id="form-add-node" onsubmit="submitNewNode(event)" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Entity Name / Label</label>
+                    <input type="text" id="new-node-label" required maxlength="80" placeholder="e.g. Quantum Teleportation" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:border-quantum-400 focus:outline-none select-text">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Entity Category</label>
+                    <select id="new-node-type" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:border-quantum-400 focus:outline-none">
+                        <option value="Concept">Concept</option>
+                        <option value="Quantum Entity">Quantum Entity</option>
+                        <option value="Document">Document Chunk</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Description / Metadata</label>
+                    <textarea id="new-node-desc" rows="3" required maxlength="1000" placeholder="Explain relationship or description..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:border-quantum-400 focus:outline-none resize-none select-text"></textarea>
+                </div>
+                <div class="pt-2 flex justify-end space-x-2">
+                    <button type="button" onclick="closeAddNodeModal()" class="px-4 py-2 rounded-xl text-xs text-slate-400 hover:bg-slate-800 transition">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-quantum-500 hover:bg-quantum-600 text-quantum-950 font-bold rounded-xl text-xs transition">Create Graph Node</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 2: FastAPI Logs Terminal -->
+    <div id="modal-api-logs" class="hidden fixed inset-0 bg-quantum-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-2xl rounded-2xl p-5 border border-slate-700 space-y-3 shadow-2xl flex flex-col h-[70vh]">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="terminal" class="w-5 h-5 text-accent-cyan"></i>
+                    <h3 class="font-bold text-sm text-slate-100 font-mono">FastAPI Communication Console Logs</h3>
+                </div>
+                <button onclick="closeApiLogModal()" class="text-slate-400 hover:text-slate-100"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div id="api-log-container" class="flex-1 bg-quantum-950 rounded-xl p-3 font-mono text-xs overflow-y-auto space-y-2 border border-slate-800 text-slate-300 select-text"></div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        /* ==========================================================================
+           1. STATE + REAL FASTAPI CLIENT
+           ========================================================================== */
+        const API_BASE = '/api/v1';
+
+        const state = {
+            activeTab: 'chat',
+            nodes: [],
+            links: [],
+            documents: [],
+            graphStats: null,
+            activeFilter: 'all',
+            selectedNode: null,
+            graphLoaded: false,
+            apiLogs: []
+        };
+
+        function logApi(method, endpoint, payload, status) {
+            const time = new Date().toLocaleTimeString();
+            state.apiLogs.unshift({ time, method, endpoint, payload, status });
+            if (state.apiLogs.length > 200) state.apiLogs.pop();
+
+            const badge = document.getElementById('api-log-badge');
+            if (badge) badge.classList.remove('hidden');
+
+            const container = document.getElementById('api-log-container');
+            if (container) {
+                const el = document.createElement('div');
+                el.className = 'border-b border-slate-900 pb-1.5 break-all';
+                const statusColor = status && status >= 400 ? 'text-rose-400' : 'text-slate-500';
+                el.innerHTML = `<span class="text-slate-500">[${time}]</span> <span class="font-bold text-emerald-400">${method}</span> <span class="text-accent-cyan">${escapeHtml(endpoint)}</span>` +
+                    (status ? ` <span class="${statusColor}">${status}</span>` : '') +
+                    ` - <span class="text-slate-400">${escapeHtml(JSON.stringify(payload ?? {}).slice(0, 300))}</span>`;
+                container.prepend(el);
+            }
+        }
+
+        /* fetch wrapper: logs every call, returns parsed JSON, throws Error(detail) on failure */
+        async function api(method, path, { json, form, quiet } = {}) {
+            const opts = { method, headers: {}, cache: 'no-store' };
+            if (json !== undefined) {
+                opts.headers['Content-Type'] = 'application/json';
+                opts.body = JSON.stringify(json);
+            } else if (form) {
+                opts.body = form;
+            }
+            let res;
+            try {
+                res = await fetch(API_BASE + path, opts);
+            } catch (err) {
+                setApiStatus(false);
+                logApi(method, API_BASE + path, { error: 'network error' }, 0);
+                throw new Error('Cannot reach the FastAPI backend. Is it running on this host?');
+            }
+            let data = null;
+            try { data = await res.json(); } catch (_) { /* empty body */ }
+            if (!quiet) logApi(method, API_BASE + path, data && typeof data === 'object' && !Array.isArray(data) ? summarize(data) : data, res.status);
+            if (!res.ok) {
+                const detail = data && (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)) || res.statusText;
+                throw new Error(detail);
+            }
+            return data;
+        }
+
+        function summarize(obj) {
+            const out = {};
+            for (const [k, v] of Object.entries(obj)) {
+                if (typeof v === 'string') out[k] = v.length > 80 ? v.slice(0, 80) + '…' : v;
+                else if (Array.isArray(v)) out[k] = `[${v.length} items]`;
+                else out[k] = v;
+            }
+            return out;
+        }
+
+        function setApiStatus(ok) {
+            const ping = document.getElementById('api-dot-ping');
+            const dot = document.getElementById('api-dot');
+            const text = document.getElementById('api-status-text');
+            const color = ok ? 'bg-emerald-400' : 'bg-rose-500';
+            ping.className = `w-2 h-2 rounded-full ${color} ${ok ? 'animate-ping' : ''}`;
+            dot.className = `w-2 h-2 rounded-full ${color}`;
+            text.className = `${ok ? 'text-emerald-400' : 'text-rose-400'} font-semibold`;
+            text.innerText = ok ? '200 OK' : 'offline';
+        }
+
+        async function checkHealth() {
+            try {
+                const res = await fetch(API_BASE + '/health');
+                setApiStatus(res.ok);
+            } catch (_) { setApiStatus(false); }
+        }
+
+        function formatNumber(n) { return (n ?? 0).toLocaleString('en-US'); }
+
+        function applyStats(stats) {
+            if (!stats) return;
+            state.graphStats = stats;
+            document.getElementById('stat-total-nodes').innerText = formatNumber(stats.nodes);
+            document.getElementById('stat-total-vectors').innerText = formatNumber(stats.chunks);
+            document.getElementById('doc-stat-count').innerText = `${formatNumber(stats.documents)} Files`;
+            document.getElementById('doc-stat-chunks').innerText = `${formatNumber(stats.chunks)} Chunks`;
+            document.getElementById('doc-stat-entities').innerText = `${formatNumber(stats.concepts)} Entities`;
+            document.getElementById('doc-count-badge').innerText = stats.documents;
+        }
+
+        async function refreshStats() {
+            try {
+                const data = await api('GET', '/documents/status', { quiet: true });
+                applyStats(data.graph);
+            } catch (_) { /* header keeps previous values */ }
+        }
+
+        let toastTimer = null;
+        function showToast(message, kind = 'info') {
+            const el = document.getElementById('toast');
+            const color = kind === 'error' ? 'border-rose-500/50 text-rose-300' : kind === 'success' ? 'border-emerald-500/50 text-emerald-300' : 'border-quantum-400/40 text-slate-200';
+            el.className = `fixed bottom-5 right-5 z-[60] max-w-sm glass-panel rounded-xl px-4 py-3 text-xs shadow-2xl select-text ${color}`;
+            el.innerText = message;
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => el.classList.add('hidden'), 5000);
+        }
+
+        /* ==========================================================================
+           2. NAVIGATION & TAB SWITCHING
+           ========================================================================== */
+        const TAB_ACTIVE = "w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-quantum-500/10 text-quantum-400 font-medium border border-quantum-500/20 transition";
+        const TAB_IDLE = "w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 font-medium transition";
+
+        function switchTab(tab) {
+            state.activeTab = tab;
+            document.querySelectorAll('.tab-view').forEach(el => el.classList.add('hidden'));
+            ['chat', 'graph', 'docs'].forEach(t => {
+                document.getElementById('btn-tab-' + t).className = t === tab ? TAB_ACTIVE : TAB_IDLE;
+            });
+            document.getElementById('view-' + tab).classList.remove('hidden');
+
+            if (tab === 'graph') {
+                initOrResizeGraphCanvas();
+                loadGraph();
+            } else if (tab === 'docs') {
+                loadDocuments();
+            }
+        }
+
+        document.getElementById('sidebar-toggle').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.toggle('-ml-64');
+            setTimeout(() => { if (state.activeTab === 'graph') initOrResizeGraphCanvas(); }, 320);
+        });
+
+        /* ==========================================================================
+           3. CHAT WORKSPACE (real /api/v1/chat/query)
+           ========================================================================== */
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        const chatMessages = document.getElementById('chat-messages');
+        const chatFileInput = document.getElementById('chat-file-input');
+        const chatAttachedFilesContainer = document.getElementById('chat-attached-files-container');
+        const MAX_CHAT_ATTACHMENTS = 3;
+
+        let currentChatAttachments = []; // { file: File, name, size }
+        let chatBusy = false;
+        let activeStreamController = null, selectedDocumentIds = [], debugRetrieval = false;
+        // Advanced RAG controls live in the composer's Tools menu, not in a permanent panel above it.
+        async function refreshV3Documents() {
+          try { const d=await api('GET','/documents',{quiet:true}); document.getElementById('v3-doc-scope').innerHTML=(d.documents||[]).map(x=>`<option value="${escapeHtml(x.id)}">${escapeHtml(x.name)}</option>`).join(''); } catch(e){console.warn(e);}
+        }
+        document.getElementById('v3-doc-scope').addEventListener('change',e=>{selectedDocumentIds=Array.from(e.target.selectedOptions).map(o=>o.value);document.getElementById('v3-scope-label').innerText=selectedDocumentIds.length?`Restricted to ${selectedDocumentIds.length} document(s)`:'Global knowledge base';});
+        document.getElementById('v3-global').onclick=()=>{document.getElementById('v3-doc-scope').selectedIndex=-1;selectedDocumentIds=[];document.getElementById('v3-scope-label').innerText='Global knowledge base';};
+        document.getElementById('v3-debug').onchange=e=>debugRetrieval=e.target.checked;
+        document.getElementById('v3-stop').onclick=()=>activeStreamController?.abort();
+        function showV3Output(title,output,quiz=false){
+          document.getElementById('v3-output-modal')?.remove();
+          const modal=document.createElement('div');modal.id='v3-output-modal';modal.className='fixed inset-0 z-[80] bg-black/70 flex items-center justify-center p-4';
+          const panel=document.createElement('div');panel.className='glass-panel w-full max-w-3xl max-h-[85vh] overflow-auto rounded-2xl p-5 space-y-3';
+          const heading=document.createElement('h2');heading.className='font-semibold text-quantum-300';heading.textContent=title;
+          const pre=document.createElement('pre');pre.className='whitespace-pre-wrap break-words text-sm text-slate-200 select-text';pre.textContent=output;
+          const actions=document.createElement('div');actions.className='flex flex-wrap gap-2';
+          const copy=document.createElement('button');copy.className='px-3 py-2 rounded-lg bg-quantum-600 text-white text-xs';copy.textContent='Copy output';copy.onclick=()=>navigator.clipboard?.writeText(output).then(()=>showToast('Copied.','success')).catch(()=>showToast('Clipboard permission unavailable.','error'));
+          const close=document.createElement('button');close.className='px-3 py-2 rounded-lg bg-slate-800 text-xs';close.textContent='Close';close.onclick=()=>modal.remove();
+          actions.append(copy);
+          if(quiz){const toggle=document.createElement('button');toggle.className='px-3 py-2 rounded-lg bg-slate-800 text-xs';toggle.textContent='Hide answer key';let hidden=false;toggle.onclick=()=>{const marker=output.search(/ANSWER KEY/i);if(marker<0){showToast('No separate answer key found.','info');return;}hidden=!hidden;pre.textContent=hidden?output.slice(0,marker)+'\n[Answer key hidden until you choose to reveal it.]':output;toggle.textContent=hidden?'Reveal answer key':'Hide answer key';};actions.append(toggle);}
+          actions.append(close);panel.append(heading,pre,actions);modal.append(panel);modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});document.body.append(modal);
+        }
+        document.getElementById('v3-compare').onclick=async()=>{if(selectedDocumentIds.length<2)return showToast('Select at least two documents.','error');const question=prompt('Comparison question:','Compare main concepts and conclusions.');if(!question)return;try{const r=await api('POST','/compare',{json:{document_ids:selectedDocumentIds,question}});showV3Output('Document comparison',r.answer);}catch(e){showToast(e.message,'error');}};
+        document.getElementById('v3-study').onclick=async()=>{if(!selectedDocumentIds.length)return showToast('Select documents first.','error');const kind=prompt('Choose summary, notes, flashcards, mcq, short_answer','summary');if(!kind)return;if(!['summary','notes','flashcards','mcq','short_answer'].includes(kind))return showToast('Unsupported study output type.','error');const difficulty=prompt('Difficulty: beginner, intermediate, advanced','intermediate');if(!difficulty||!['beginner','intermediate','advanced'].includes(difficulty))return showToast('Invalid difficulty.','error');const count=Number(prompt('Number of cards/questions (1–30)','8')||8);if(!Number.isInteger(count)||count<1||count>30)return showToast('Enter a number from 1 to 30.','error');try{const r=await api('POST','/study',{json:{document_ids:selectedDocumentIds,kind,difficulty,count}});showV3Output('Study material · '+kind,r.output,kind==='mcq'||kind==='short_answer');}catch(e){showToast(e.message,'error');}};
+        refreshV3Documents();
+        refreshConversationList();
+
+
+        function formatBytes(bytes) {
+            if (!bytes) return '—';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+        }
+
+        function handleChatAttachmentsSelected(e) {
+            const files = Array.from(e.target.files);
+            files.forEach(file => {
+                if (currentChatAttachments.length >= MAX_CHAT_ATTACHMENTS) {
+                    showToast(`You can attach at most ${MAX_CHAT_ATTACHMENTS} files per message.`, 'error');
+                    return;
+                }
+                currentChatAttachments.push({ file, name: file.name, size: formatBytes(file.size) });
+            });
+            renderChatAttachmentsPreview();
+            chatFileInput.value = '';
+        }
+
+        async function handleVideoSelected(e) {
+            const file=e.target.files?.[0]; e.target.value=''; if(!file)return;
+            if(currentChatAttachments.length>=MAX_CHAT_ATTACHMENTS){showToast('Remove an attachment before adding a video transcript.','error');return;}
+            if(file.size>100*1024*1024){showToast('Video exceeds the 100 MB upload limit.','error');return;}
+            showToast('Extracting video audio and generating a transcript…','info');
+            const form=new FormData(); form.append('file',file,file.name);
+            try {
+                const result=await api('POST','/video/transcribe',{form});
+                if(!result.transcript?.trim()) throw new Error('No speech was detected in this video.');
+                const transcript=`Video: ${file.name}\nTranscript (timestamps when available):\n${result.transcript}`;
+                const transcriptFile=new File([transcript],`${file.name.replace(/\.[^.]+$/,'')}_transcript.txt`,{type:'text/plain'});
+                currentChatAttachments.push({file:transcriptFile,name:transcriptFile.name,size:formatBytes(file.size)});
+                renderChatAttachmentsPreview(); showToast('Video transcript attached. Ask a question about the video.','success');
+            } catch(err){showToast('Video processing failed: '+err.message,'error');}
+        }
+
+        function removeChatAttachment(index) {
+            currentChatAttachments.splice(index, 1);
+            renderChatAttachmentsPreview();
+        }
+
+        function renderChatAttachmentsPreview() {
+            if (currentChatAttachments.length === 0) {
+                chatAttachedFilesContainer.classList.add('hidden');
+                chatAttachedFilesContainer.innerHTML = '';
+                return;
+            }
+            chatAttachedFilesContainer.classList.remove('hidden');
+            chatAttachedFilesContainer.innerHTML = currentChatAttachments.map((file, idx) => `
+                <div class="flex items-center space-x-1.5 bg-slate-900 border border-slate-700/80 px-2.5 py-1 rounded-lg text-xs font-mono text-quantum-400">
+                    <i data-lucide="file-text" class="w-3.5 h-3.5 text-accent-cyan"></i>
+                    <span class="truncate max-w-[160px]">${escapeHtml(file.name)}</span>
+                    <span class="text-[10px] text-slate-500">(${file.size})</span>
+                    <button type="button" onclick="removeChatAttachment(${idx})" class="text-slate-400 hover:text-rose-400 ml-1">
+                        <i data-lucide="x" class="w-3 h-3"></i>
+                    </button>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        document.getElementById('toggle-graph-rag').addEventListener('change', (e) => {
+            document.getElementById('rag-mode-label').innerText = e.target.checked ? 'Hybrid RAG Active' : 'Vector-only RAG';
+        });
+
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+                e.preventDefault();
+                chatForm.requestSubmit();
+            }
+        });
+
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (chatBusy) return;
+            const text = chatInput.value.trim();
+            if (!text && currentChatAttachments.length === 0) return;
+
+            const attachments = [...currentChatAttachments];
+            appendUserMessage(text, attachments);
+            chatInput.value = '';
+            currentChatAttachments = [];
+            renderChatAttachmentsPreview();
+            processRAGQuery(text, attachments);
+        });
+
+        function sendQuickPrompt(promptText) {
+            if (state.activeTab !== 'chat') switchTab('chat');
+            chatInput.value = promptText;
+            chatForm.requestSubmit();
+        }
+
+        function appendUserMessage(text, attachments = []) {
+            const attachmentsHtml = attachments.length > 0 ? `
+                <div class="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-slate-700/40">
+                    ${attachments.map(att => `
+                        <div class="flex items-center space-x-1 bg-quantum-950/60 px-2 py-0.5 rounded text-[11px] font-mono text-accent-cyan border border-slate-800">
+                            <i data-lucide="paperclip" class="w-3 h-3"></i>
+                            <span>${escapeHtml(att.name)}</span>
+                        </div>`).join('')}
+                </div>` : '';
+
+            chatMessages.insertAdjacentHTML('beforeend', `
+                <div class="flex items-start space-x-3 justify-end animate-fade-in">
+                    <div class="flex-1 space-y-1 text-right">
+                        <span class="text-[10px] text-slate-500 font-mono">User Query</span>
+                        <div class="glass-panel bg-quantum-500/10 border-quantum-500/30 p-4 rounded-2xl text-sm leading-relaxed text-slate-100 inline-block max-w-xl text-left whitespace-pre-wrap break-words">${text ? escapeHtml(text) : '<em class="text-slate-400 text-xs">Query submitted with attached files</em>'}${attachmentsHtml}</div>
+                    </div>
+                    <div class="w-8 h-8 rounded-lg bg-accent-purple/20 border border-accent-purple/30 flex items-center justify-center text-accent-purple shrink-0 mt-0.5 font-bold text-xs">YOU</div>
+                </div>`);
+            lucide.createIcons();
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function setChatBusy(busy) {
+            chatBusy = busy;
+            document.getElementById('btn-send-message').disabled = busy;
+            const stop = document.getElementById('v3-stop'); if (stop) stop.classList.toggle('hidden', !busy);
+        }
+
+        let activeConversationId = null;
+
+        async function refreshConversationList() {
+            const list = document.getElementById('conversation-list'); if (!list) return;
+            try {
+                const items = await api('GET', '/history', {quiet:true});
+                if (!items.length) { list.innerHTML='<p class="text-[11px] text-slate-600 px-2 py-2">No conversations yet.</p>'; return; }
+                list.innerHTML = items.map(c => `<div class="group flex items-center gap-1 rounded-lg ${c.id===activeConversationId?'bg-slate-800':'hover:bg-slate-800/70'}">
+                    <button type="button" data-chat-id="${escapeHtml(c.id)}" class="min-w-0 flex-1 text-left px-2 py-2 text-xs text-slate-300 truncate" title="${escapeHtml(c.title)}">${escapeHtml(c.title || 'New chat')}</button>
+                    <button type="button" data-rename-id="${escapeHtml(c.id)}" class="hidden group-hover:block px-1 text-slate-500 hover:text-white" title="Rename">✎</button>
+                    <button type="button" data-delete-id="${escapeHtml(c.id)}" class="hidden group-hover:block px-1 text-slate-500 hover:text-rose-400" title="Delete">×</button></div>`).join('');
+                list.querySelectorAll('[data-chat-id]').forEach(b=>b.onclick=()=>loadConversation(b.dataset.chatId));
+                list.querySelectorAll('[data-rename-id]').forEach(b=>b.onclick=()=>renameConversation(b.dataset.renameId));
+                list.querySelectorAll('[data-delete-id]').forEach(b=>b.onclick=()=>deleteConversation(b.dataset.deleteId));
+            } catch(e) { console.warn('Could not refresh conversations',e); }
+        }
+        async function startNewConversation() {
+            activeConversationId=null; selectedDocumentIds=[]; debugRetrieval=false;
+            const scope=document.getElementById('v3-doc-scope'); if(scope) Array.from(scope.options).forEach(o=>o.selected=false);
+            document.getElementById('v3-scope-label').innerText='Global knowledge base';
+            while(chatMessages.children.length>1) chatMessages.removeChild(chatMessages.lastChild);
+            chatInput.value=''; currentChatAttachments=[]; renderChatAttachmentsPreview();
+            await refreshConversationList(); chatInput.focus();
+        }
+        async function loadConversation(id) {
+            try {
+                const data=await api('GET',`/history/${encodeURIComponent(id)}`,{quiet:true});
+                activeConversationId=id; while(chatMessages.children.length>1) chatMessages.removeChild(chatMessages.lastChild);
+                for(const m of data.messages||[]) {
+                    if(m.role==='user') appendUserMessage(m.content||[]);
+                    else { const wrap=document.createElement('div'); wrap.className='ml-11 glass-card p-4 rounded-2xl text-sm text-slate-200 border border-slate-700/60'; const body=document.createElement('div'); body.className='md'; renderMarkdownInto(body,m.content||''); wrap.append(body); chatMessages.append(wrap); }
+                }
+                await refreshConversationList(); chatMessages.scrollTop=chatMessages.scrollHeight;
+            } catch(e){showToast('Could not load conversation: '+e.message,'error');}
+        }
+        async function renameConversation(id) {
+            const title=prompt('Rename conversation:'); if(!title?.trim()) return;
+            try { await api('PATCH',`/history/${encodeURIComponent(id)}?title=${encodeURIComponent(title.trim())}`); await refreshConversationList(); } catch(e){showToast(e.message,'error');}
+        }
+        async function deleteConversation(id) {
+            if(!confirm('Delete this conversation permanently?')) return;
+            try { await api('DELETE',`/history/${encodeURIComponent(id)}`); if(activeConversationId===id) await startNewConversation(); else await refreshConversationList(); } catch(e){showToast(e.message,'error');}
+        }
+        async function showChatHistory() { await refreshConversationList(); }
+        async function deleteSavedChats() {
+            const items=await api('GET','/history',{quiet:true}); if(!items.length)return;
+            if(!confirm(`Delete all ${items.length} saved conversations?`))return;
+            for(const item of items) await api('DELETE',`/history/${encodeURIComponent(item.id)}`,{quiet:true});
+            await startNewConversation();
+        }
+
+        async function processRAGQuery(queryText, attachments = []) {
+            const topK = parseInt(document.getElementById('slider-top-k').value, 10);
+            const threshold = parseFloat(document.getElementById('slider-sim').value);
+            const graphEnhanced = document.getElementById('toggle-graph-rag').checked;
+
+            const botMsgId = 'bot-msg-' + Date.now();
+            chatMessages.insertAdjacentHTML('beforeend', `
+                <div id="${botMsgId}" class="flex items-start space-x-3 animate-fade-in">
+                    <div class="w-8 h-8 rounded-lg bg-quantum-500/20 border border-quantum-400/30 flex items-center justify-center text-quantum-400 shrink-0 mt-0.5">
+                        <i data-lucide="bot" class="w-4 h-4"></i>
+                    </div>
+                    <div class="flex-1 min-w-0 space-y-2">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xs font-semibold text-quantum-400">Quantum Intelligence Engine</span>
+                            <span class="status-label text-[10px] text-accent-cyan font-mono animate-pulse">● ${attachments.length ? 'Analyzing attachments & ' : ''}Graph Vector Index...</span>
+                        </div>
+                        <div class="glass-card p-4 rounded-2xl text-sm leading-relaxed text-slate-200 border border-slate-700/60 shadow-xl space-y-3">
+                            <div class="message-content md"><span class="inline-block w-2 h-4 bg-quantum-400 animate-pulse"></span></div>
+                            <div class="retrieved-sources hidden border-t border-slate-800 pt-2 text-xs text-slate-400 space-y-1">
+                                <div class="font-mono text-[10px] text-slate-500 uppercase font-semibold sources-title">Graph-Enhanced RAG Sources:</div>
+                                <div class="flex flex-wrap gap-1.5 sources-list"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`);
+            lucide.createIcons();
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            setChatBusy(true);
+
+            const target = document.getElementById(botMsgId);
+            const contentBox = target.querySelector('.message-content');
+            const sourcesBox = target.querySelector('.retrieved-sources');
+            const statusSpan = target.querySelector('.status-label');
+
+            const form = new FormData();
+            form.append('question', queryText);
+            form.append('top_k', String(topK));
+            form.append('threshold', String(threshold));
+            form.append('graph_enhanced', String(graphEnhanced));
+            if (activeConversationId) form.append('conversation_id', activeConversationId);
+            attachments.forEach(a => form.append('files', a.file, a.name));
+
+            try {
+                if (attachments.length) {
+                    const data = await api('POST', '/chat/query', { form });
+                    renderMarkdownInto(contentBox, data.answer);
+                    await appendAutomaticDiagram(contentBox, queryText, data.answer);
+                    if(data.conversation_id) activeConversationId=data.conversation_id; await refreshConversationList();
+                    if(data.citations?.length){
+                      const list=target.querySelector('.sources-list');
+                      list.innerHTML=data.citations.map(c=>`<button class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-accent-cyan text-[11px]" data-doc="${escapeHtml(c.document_id||'')}" data-page="${escapeHtml(c.page || '')}">${escapeHtml(c.label||c.source)}</button>`).join('');
+                      list.querySelectorAll('button').forEach(b=>b.onclick=()=>window.open(API_BASE+'/documents/'+encodeURIComponent(b.dataset.doc)+'/preview'+(b.dataset.page?'#page='+b.dataset.page:''),'_blank'));
+                      sourcesBox.classList.remove('hidden');
+                    }
+                    statusSpan.innerText = `Completed (${Math.round(data.processing_time_ms)}ms · ${data.model_used})`;
+                } else {
+                    activeStreamController = new AbortController();
+                    document.getElementById('v3-stop').disabled = false;
+                    const response = await fetch(API_BASE + '/chat/stream', {method:'POST',
+                      headers:{'Content-Type':'application/json'},signal:activeStreamController.signal,
+                      body:JSON.stringify({question:queryText,conversation_id:activeConversationId,
+                        document_ids:selectedDocumentIds.length?selectedDocumentIds:null,top_k:topK,
+                        threshold,graph_enhanced:graphEnhanced,debug:debugRetrieval})});
+                    if(!response.ok){const e=await response.json().catch(()=>({detail:response.statusText}));throw new Error(e.detail||'Stream failed');}
+                    const reader=response.body.getReader(), decoder=new TextDecoder(); let buffer='', answer='';
+                    const dispatch=(ev,data)=>{
+                      if(ev==='chunk'){answer+=data.text;contentBox.classList.add('whitespace-pre-wrap');const cursor=document.createElement('span');cursor.className='text-quantum-300 animate-pulse';cursor.textContent='▍';contentBox.replaceChildren(document.createTextNode(answer),cursor);chatMessages.scrollTop=chatMessages.scrollHeight;}
+                      else if(ev==='meta'&&data.conversation_id)activeConversationId=data.conversation_id;
+                      else if(ev==='citations'){
+                        const list=target.querySelector('.sources-list');
+                        list.innerHTML=data.map(c=>`<button class="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-accent-cyan text-[11px]" data-doc="${escapeHtml(c.document_id)}" data-page="${escapeHtml(c.page || '')}">${escapeHtml(c.label)}</button>`).join('');
+                        list.querySelectorAll('button').forEach(b=>b.onclick=()=>window.open(API_BASE+'/documents/'+encodeURIComponent(b.dataset.doc)+'/preview'+(b.dataset.page?'#page='+b.dataset.page:''),'_blank'));
+                        if(data.length)sourcesBox.classList.remove('hidden');
+                      } else if(ev==='suggestions'){
+                        const box=document.createElement('div');box.className='flex flex-wrap gap-2 mt-2';
+                        data.forEach(q=>{const b=document.createElement('button');b.className='px-2 py-1 rounded-full border border-quantum-500/30 text-quantum-300 text-xs';b.textContent=q;b.onclick=()=>sendQuickPrompt(q);box.appendChild(b);});
+                        target.querySelector('.glass-card').appendChild(box);
+                      } else if(ev==='debug'){
+                        const panel=document.createElement('details');panel.className='mt-2 text-xs text-slate-400';
+                        const summary=document.createElement('summary');summary.textContent=`Debug: ${data.chunk_count} chunks · ${data.retrieval_latency_ms} ms`;panel.appendChild(summary);
+                        const pre=document.createElement('pre');pre.className='whitespace-pre-wrap overflow-auto max-h-64';pre.textContent=JSON.stringify(data.scores,null,2);panel.appendChild(pre);target.querySelector('.glass-card').appendChild(panel);
+                      } else if(ev==='done'){activeConversationId=data.conversation_id||activeConversationId;statusSpan.innerText='Completed · Groq stream';refreshConversationList();}
+                      else if(ev==='error')throw new Error(data.message||'Generation failed');
+                    };
+                    while(true){const part=await reader.read();if(part.done)break;buffer+=decoder.decode(part.value,{stream:true});const frames=buffer.split('\n\n');buffer=frames.pop();for(const frame of frames){const ev=frame.match(/event:\s*(.+)/)?.[1];const raw=frame.match(/data:\s*(.+)/)?.[1];if(ev&&raw)dispatch(ev,JSON.parse(raw));}}
+                    if(buffer.trim()){const ev=buffer.match(/event:\s*(.+)/)?.[1],raw=buffer.match(/data:\s*(.+)/)?.[1];if(ev&&raw)dispatch(ev,JSON.parse(raw));}
+                    contentBox.classList.remove('whitespace-pre-wrap');
+                    renderMarkdownInto(contentBox, answer);
+                    await appendAutomaticDiagram(contentBox, queryText, answer);
+                }
+                statusSpan.classList.remove('animate-pulse');
+            } catch (err) {
+                statusSpan.classList.remove('animate-pulse');
+                statusSpan.className = 'status-label text-[10px] text-rose-400 font-mono';
+                statusSpan.innerText = err.name === 'AbortError' ? 'Generation stopped' : 'Error';
+                if(err.name !== 'AbortError') contentBox.innerHTML = `<span class="text-rose-300">${escapeHtml(err.message)}</span>`;
+            } finally {
+                setChatBusy(false);
+                activeStreamController = null;
+                document.getElementById('v3-stop').disabled = true;
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }
+
+        async function appendAutomaticDiagram(target, question, answer) {
+            // The backend detects supported scientific concepts and renders a real local PNG.
+            try {
+                const response = await fetch(API_BASE + '/visualizations/auto', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({question, answer: String(answer || '').slice(0, 12000)})
+                });
+                if (!response.ok) return;
+                if (!(response.headers.get('content-type') || '').includes('image/png')) return;
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const kind = response.headers.get('X-Diagram-Type') || 'scientific diagram';
+                const title = response.headers.get('X-Diagram-Title') || kind.replaceAll('_',' ');
+                const figure = document.createElement('figure');
+                figure.className = 'generated-diagram';
+                const heading = document.createElement('div');
+                heading.className = 'text-sm font-semibold text-slate-200 mb-2';
+                heading.textContent = title;
+                const image = document.createElement('img');
+                image.src = url; image.alt = response.headers.get('X-Diagram-Alt') || title;
+                image.loading = 'lazy';
+                const caption = document.createElement('figcaption');
+                caption.textContent = response.headers.get('X-Diagram-Description') || 'Generated scientific visualization';
+                const download = document.createElement('a');
+                download.href = url; download.download = kind + '.png';
+                download.className = 'inline-block mt-2 text-xs text-sky-300 underline';
+                download.textContent = 'Download PNG';
+                figure.append(heading, image, caption, download);
+                target.appendChild(figure);
+                image.addEventListener('load', () => { chatMessages.scrollTop = chatMessages.scrollHeight; }, {once:true});
+            } catch (error) { console.warn('Automatic diagram generation unavailable:', error); }
+        }
+
+        function stripUploadPrefix(name) { return name.replace(/^[0-9a-f]{8}_/, ''); }
+
+        /* Markdown + LaTeX rendering (falls back to escaped text if CDN libs are unavailable) */
+        function renderMarkdownInto(el, markdown) {
+            if (!window.marked || !window.DOMPurify) {
+                el.innerHTML = escapeHtml(markdown).replace(/\n/g, '<br>');
+                return;
+            }
+            // Protect math from the Markdown parser (underscores, backslashes, etc.)
+            const stash = [];
+            const keep = (m) => { stash.push(m); return `QMATHPH${stash.length - 1}QEND`; };
+            let text = markdown
+                .replace(/\$\$[\s\S]+?\$\$/g, keep)
+                .replace(/\\\[[\s\S]+?\\\]/g, keep)
+                .replace(/\\\([\s\S]+?\\\)/g, keep)
+                .replace(/\$(?!\s)[^$\n]+?(?<!\s)\$/g, keep);
+            let html = DOMPurify.sanitize(marked.parse(text, { breaks: true, gfm: true }));
+            html = html.replace(/QMATHPH(\d+)QEND/g, (_, i) => escapeHtml(stash[Number(i)]));
+            el.innerHTML = html;
+            if (window.renderMathInElement) {
+                try {
+                    renderMathInElement(el, {
+                        delimiters: [
+                            { left: '$$', right: '$$', display: true },
+                            { left: '\\[', right: '\\]', display: true },
+                            { left: '\\(', right: '\\)', display: false },
+                            { left: '$', right: '$', display: false }
+                        ],
+                        throwOnError: false
+                    });
+                } catch (_) { /* leave raw text */ }
+            }
+        }
+
+        function clearChatHistory() {
+            // Keep the welcome message (first child) and remove the conversation
+            while (chatMessages.children.length > 1) chatMessages.removeChild(chatMessages.lastChild);
+            logApi('LOCAL', 'chat/history', { status: 'cleared' });
+        }
+
+        function escapeHtml(text) {
+            return String(text).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m]));
+        }
+
+        /* ==========================================================================
+           4. INTERACTIVE 2D KNOWLEDGE GRAPH CANVAS (real data from /graph/nodes)
+           ========================================================================== */
+        let canvas, ctx;
+        let width = 800, height = 600;
+        let transform = { x: 0, y: 0, k: 1 };
+        let isDraggingCanvas = false;
+        let draggedNode = null;
+        let dragStartPos = { x: 0, y: 0 };
+        let graphLoopRunning = false;
+        let nodeIndex = new Map();
+        let alpha = 1;            // simulation "temperature"; decays to rest
+        const ALPHA_MIN = 0.005;
+        const reheat = (a = 0.4) => { alpha = Math.max(alpha, a); };
+
+        const NODE_COLORS = { 'Concept': '#38bdf8', 'Quantum Entity': '#a855f7', 'Document': '#10b981' };
+
+        function nodeRadius(n) { return Math.min(20, 9 + Math.sqrt(n.degree || 1) * 0.9); }
+        function isVisible(n) { return state.activeFilter === 'all' || n.type === state.activeFilter; }
+
+        function initOrResizeGraphCanvas() {
+            const container = document.getElementById('canvas-container');
+            canvas = document.getElementById('graph-canvas');
+            if (!container || !canvas) return;
+
+            width = container.clientWidth;
+            height = container.clientHeight;
+            canvas.width = width;
+            canvas.height = height;
+            ctx = canvas.getContext('2d');
+
+            setupCanvasEvents();
+            if (!graphLoopRunning) {
+                graphLoopRunning = true;
+                requestAnimationFrame(graphAnimationLoop);
+            }
+        }
+
+        async function loadGraph() {
+            try {
+                const data = await api('GET', '/graph/nodes?limit=60', { quiet: true });
+                if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.links)) {
+                    const preview = JSON.stringify(data);
+                    logApi('GET', '/api/v1/graph/nodes', { unexpected_response: preview ? preview.slice(0, 200) : String(data) }, 200);
+                    throw new Error('Unexpected reply from /api/v1/graph/nodes: ' + (preview ? preview.slice(0, 160) : String(data)) + ' (restart the backend and hard-refresh with Ctrl+F5)');
+                }
+                logApi('GET', '/api/v1/graph/nodes', { nodes: data.nodes.length, links: data.links.length }, 200);
+                // Preserve positions of nodes that already exist
+                const old = new Map(state.nodes.map(n => [n.id, n]));
+                state.nodes = data.nodes.map(n => {
+                    const prev = old.get(n.id);
+                    return prev ? Object.assign(prev, n) : Object.assign(n, { x: 0, y: 0, vx: 0, vy: 0, _new: true });
+                });
+                // Golden-angle spiral start: nodes begin spread out, so they don't overlap or explode
+                let idx = 0;
+                state.nodes.forEach(n => {
+                    if (!n._new) return;
+                    const angle = idx * 2.399963, rad = 40 * Math.sqrt(idx + 1);
+                    n.x = width / 2 + Math.cos(angle) * rad * 1.4;
+                    n.y = height / 2 + Math.sin(angle) * rad;
+                    delete n._new; idx++;
+                });
+                alpha = 1;
+                state.links = data.links;
+                nodeIndex = new Map(state.nodes.map(n => [n.id, n]));
+                state.graphLoaded = true;
+                applyStats(data.stats);
+                document.getElementById('graph-empty').classList.toggle('hidden', state.nodes.length > 0);
+                const label = document.getElementById('graph-shown-label');
+                label.innerText = `showing top ${data.shown_concepts} of ${formatNumber(data.total_concepts)} concepts`;
+                label.classList.remove('hidden');
+                if (state.selectedNode && !nodeIndex.has(state.selectedNode.id)) closeGraphInspector();
+            } catch (err) {
+                showToast('Failed to load graph: ' + err.message, 'error');
+            }
+        }
+
+        function setupCanvasEvents() {
+            if (canvas.dataset.eventsSetup) return;
+            canvas.dataset.eventsSetup = 'true';
+
+            const toWorld = (e) => {
+                const rect = canvas.getBoundingClientRect();
+                return { x: (e.clientX - rect.left - transform.x) / transform.k, y: (e.clientY - rect.top - transform.y) / transform.k };
+            };
+
+            canvas.addEventListener('mousedown', (e) => {
+                const m = toWorld(e);
+                let hit = null;
+                for (let i = state.nodes.length - 1; i >= 0; i--) {
+                    const n = state.nodes[i];
+                    if (!isVisible(n)) continue;
+                    if (Math.hypot(n.x - m.x, n.y - m.y) < nodeRadius(n) + 6) { hit = n; break; }
+                }
+                if (hit) {
+                    draggedNode = hit;
+                    reheat(0.25);
+                    selectNode(hit);
+                } else {
+                    isDraggingCanvas = true;
+                    dragStartPos = { x: e.clientX - transform.x, y: e.clientY - transform.y };
+                }
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (draggedNode) {
+                    const m = toWorld(e);
+                    draggedNode.x = m.x; draggedNode.y = m.y;
+                    draggedNode.vx = 0; draggedNode.vy = 0;
+                    reheat(0.25);
+                } else if (isDraggingCanvas) {
+                    transform.x = e.clientX - dragStartPos.x;
+                    transform.y = e.clientY - dragStartPos.y;
+                }
+            });
+
+            window.addEventListener('mouseup', () => { draggedNode = null; isDraggingCanvas = false; });
+
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const rect = canvas.getBoundingClientRect();
+                const px = e.clientX - rect.left, py = e.clientY - rect.top;
+                const factor = e.deltaY < 0 ? 1.1 : 0.9;
+                const k = Math.max(0.3, Math.min(3, transform.k * factor));
+                // Zoom around the cursor
+                transform.x = px - (px - transform.x) * (k / transform.k);
+                transform.y = py - (py - transform.y) * (k / transform.k);
+                transform.k = k;
+            }, { passive: false });
+        }
+
+        function graphAnimationLoop() {
+            if (state.activeTab !== 'graph') { graphLoopRunning = false; return; }
+
+            const nodes = state.nodes;
+
+            // Simulated annealing: forces shrink as alpha cools, so the layout settles and stays still.
+            if (alpha > ALPHA_MIN || draggedNode) {
+                alpha *= 0.985;
+                const velocityDecay = 0.55, maxSpeed = 12;
+
+                // Many-body repulsion (inverse distance, long range) + hard collision radius
+                for (let i = 0; i < nodes.length; i++) {
+                    for (let j = i + 1; j < nodes.length; j++) {
+                        const n1 = nodes[i], n2 = nodes[j];
+                        let dx = n2.x - n1.x, dy = n2.y - n1.y;
+                        let dist2 = dx * dx + dy * dy;
+                        if (dist2 < 0.01) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; dist2 = dx * dx + dy * dy + 0.01; }
+                        const dist = Math.sqrt(dist2);
+                        let force = (2200 * alpha) / dist2 * dist / Math.max(dist, 30);
+                        const minDist = nodeRadius(n1) + nodeRadius(n2) + 34; // leave room for labels
+                        if (dist < minDist) force += (minDist - dist) * 0.35;  // collision push
+                        const fx = (dx / dist) * force, fy = (dy / dist) * force;
+                        n1.vx -= fx; n1.vy -= fy; n2.vx += fx; n2.vy += fy;
+                    }
+                }
+
+                // Springs along links
+                state.links.forEach(link => {
+                    const s = nodeIndex.get(link.source), t = nodeIndex.get(link.target);
+                    if (!s || !t) return;
+                    const dx = t.x - s.x, dy = t.y - s.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                    const force = (dist - 140) * 0.04 * alpha;
+                    const fx = (dx / dist) * force, fy = (dy / dist) * force;
+                    s.vx += fx; s.vy += fy; t.vx -= fx; t.vy -= fy;
+                });
+
+                nodes.forEach(n => {
+                    n.vx += (width / 2 - n.x) * 0.006 * alpha;
+                    n.vy += (height / 2 - n.y) * 0.006 * alpha;
+                    if (n === draggedNode) { n.vx = 0; n.vy = 0; return; }
+                    n.vx *= velocityDecay; n.vy *= velocityDecay;
+                    const speed = Math.hypot(n.vx, n.vy);
+                    if (speed > maxSpeed) { n.vx = n.vx / speed * maxSpeed; n.vy = n.vy / speed * maxSpeed; }
+                    n.x += n.vx; n.y += n.vy;
+                });
+            }
+
+            ctx.clearRect(0, 0, width, height);
+            ctx.save();
+            ctx.translate(transform.x, transform.y);
+            ctx.scale(transform.k, transform.k);
+
+            const selectedId = state.selectedNode ? state.selectedNode.id : null;
+
+            // Links
+            state.links.forEach(link => {
+                const s = nodeIndex.get(link.source), t = nodeIndex.get(link.target);
+                if (!s || !t || !isVisible(s) || !isVisible(t)) return;
+                const active = selectedId && (link.source === selectedId || link.target === selectedId);
+                ctx.strokeStyle = active ? 'rgba(56, 189, 248, 0.8)' : 'rgba(51, 65, 85, 0.6)';
+                ctx.lineWidth = active ? 2 : 1.2;
+                ctx.beginPath();
+                ctx.moveTo(s.x, s.y);
+                ctx.lineTo(t.x, t.y);
+                ctx.stroke();
+            });
+
+            // Nodes
+            nodes.forEach(n => {
+                if (!isVisible(n)) return;
+                const color = NODE_COLORS[n.type] || '#38bdf8';
+                const r = nodeRadius(n);
+                const isSelected = selectedId === n.id;
+
+                if (isSelected) {
+                    ctx.beginPath(); ctx.arc(n.x, n.y, r + 8, 0, Math.PI * 2);
+                    ctx.fillStyle = color + '40'; ctx.fill();
+                }
+                ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+                ctx.fillStyle = '#0f172a'; ctx.fill();
+                ctx.lineWidth = isSelected ? 3 : 2;
+                ctx.strokeStyle = n.custom ? '#f59e0b' : color;
+                ctx.stroke();
+                ctx.beginPath(); ctx.arc(n.x, n.y, 4, 0, Math.PI * 2);
+                ctx.fillStyle = color; ctx.fill();
+
+                ctx.font = '11px Inter, sans-serif';
+                ctx.fillStyle = '#e2e8f0';
+                ctx.textAlign = 'center';
+                const text = n.label.length > 28 ? n.label.slice(0, 27) + '…' : n.label;
+                ctx.fillText(text, n.x, n.y + r + 14);
+            });
+
+            ctx.restore();
+            requestAnimationFrame(graphAnimationLoop);
+        }
+
+        async function selectNode(node) {
+            state.selectedNode = node;
+            const inspector = document.getElementById('graph-inspector');
+            inspector.classList.remove('hidden');
+            document.getElementById('node-title').innerText = node.label;
+            document.getElementById('node-description').innerText = 'Loading…';
+            const badge = document.getElementById('node-type-badge');
+            badge.innerText = node.type;
+            try {
+                const d = await api('GET', '/graph/node/' + encodeURIComponent(node.id));
+                if (!state.selectedNode || state.selectedNode.id !== node.id) return; // user moved on
+                document.getElementById('node-description').innerText = d.description || 'No description available.';
+                document.getElementById('node-vec-id').innerText = d.node_id;
+                document.getElementById('node-chunks').innerText = d.chunks;
+                document.getElementById('node-degree').innerText = `${d.degree} links`;
+            } catch (err) {
+                document.getElementById('node-description').innerText = 'Could not load node details: ' + err.message;
+            }
+        }
+
+        function closeGraphInspector() {
+            state.selectedNode = null;
+            document.getElementById('graph-inspector').classList.add('hidden');
+        }
+
+        function queryNodeInChat() {
+            if (!state.selectedNode) return;
+            const label = state.selectedNode.label;
+            switchTab('chat');
+            sendQuickPrompt(`Tell me more about the graph concept '${label}' and its connected concepts.`);
+        }
+
+        function toggleGraphFilter(type) {
+            state.activeFilter = type;
+            ['all', 'Concept', 'Quantum Entity', 'Document'].forEach(t => {
+                const btn = document.getElementById(`filter-${t}`);
+                if (!btn) return;
+                btn.className = t === type
+                    ? "px-2.5 py-1 rounded-lg text-xs font-medium bg-quantum-500/20 text-quantum-400 border border-quantum-500/30"
+                    : "px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-400 hover:text-slate-200";
+            });
+        }
+
+        function recenterGraphCanvas() { transform = { x: 0, y: 0, k: 1 }; }
+        function openAddNodeModal() { document.getElementById('modal-add-node').classList.remove('hidden'); }
+        function closeAddNodeModal() { document.getElementById('modal-add-node').classList.add('hidden'); }
+
+        async function submitNewNode(e) {
+            e.preventDefault();
+            const payload = {
+                label: document.getElementById('new-node-label').value.trim(),
+                type: document.getElementById('new-node-type').value,
+                description: document.getElementById('new-node-desc').value.trim()
+            };
+            try {
+                await api('POST', '/graph/node', { json: payload });
+                document.getElementById('form-add-node').reset();
+                closeAddNodeModal();
+                showToast(`Node "${payload.label}" added to the knowledge graph.`, 'success');
+                await loadGraph();
+                refreshStats();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        }
+
+        /* ==========================================================================
+           5. DOCUMENT VAULT (real /documents endpoints)
+           ========================================================================== */
+        async function loadDocuments() {
+            try {
+                const data = await api('GET', '/documents');
+                state.documents = data.documents;
+                applyStats(data.graph);
+                renderDocumentsList();
+            } catch (err) {
+                showToast('Failed to load documents: ' + err.message, 'error');
+            }
+        }
+
+        function renderDocumentsList() {
+            const listContainer = document.getElementById('document-list');
+            if (!state.documents.length) {
+                listContainer.innerHTML = '<div class="p-6 text-center text-xs text-slate-500">No documents indexed yet. Upload PDF, DOCX, Markdown or TXT files above.</div>';
+                return;
+            }
+            listContainer.innerHTML = state.documents.map(doc => `
+                <div class="p-4 flex items-center justify-between hover:bg-slate-900/40 transition">
+                    <div class="flex items-center space-x-3 min-w-0">
+                        <div class="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-quantum-400 border border-slate-700 shrink-0">
+                            <i data-lucide="file-code-2" class="w-5 h-5"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="font-semibold text-xs text-slate-200 truncate">${escapeHtml(doc.name)}</div>
+                            <div class="text-[11px] text-slate-400 font-mono flex items-center space-x-2 mt-0.5">
+                                <span>${formatBytes(doc.size_bytes)}</span><span>•</span>
+                                <span>${formatNumber(doc.chunks)} vector chunks</span><span>•</span>
+                                <span class="text-emerald-400">${escapeHtml(doc.status)}</span>
+                                ${doc.date ? `<span>•</span><span>${escapeHtml(doc.date)}</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button data-doc="${encodeURIComponent(doc.source)}" onclick="deleteDoc(decodeURIComponent(this.dataset.doc), this)" class="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition" title="Remove from knowledge graph">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>`).join('');
+            lucide.createIcons();
+        }
+
+        function setUploading(active, text) {
+            const icon = document.getElementById('upload-icon');
+            document.getElementById('upload-title').innerText = active ? 'Processing documents…' : 'Upload Knowledge Documents';
+            document.getElementById('upload-subtitle').innerText = active
+                ? (text || 'Extracting text, chunking, embedding and rebuilding the knowledge graph. Large PDFs can take a few minutes.')
+                : 'Drag and drop PDF, DOCX, Markdown, or TXT files (max 25 MB each) to chunk and index into the Knowledge Graph';
+            icon.classList.toggle('animate-pulse', active);
+            document.getElementById('docs-status-label').innerText = active ? 'Status: Indexing…' : 'Status: Up-to-date';
+            document.getElementById('drop-zone').style.pointerEvents = active ? 'none' : '';
+        }
+
+        async function uploadFiles(fileList) {
+            const files = Array.from(fileList || []);
+            if (!files.length) return;
+            const form = new FormData();
+            files.forEach(f => form.append('files', f, f.name));
+            setUploading(true);
+            try {
+                const data = await api('POST', '/documents/upload', { form });
+                showToast(`${data.uploaded_files.length} file(s) indexed. Graph: ${data.graph.nodes} nodes, ${data.graph.edges} edges.`, 'success');
+                state.graphLoaded = false;
+                await loadDocuments();
+            } catch (err) {
+                showToast(err.message, 'error');
+            } finally {
+                setUploading(false);
+            }
+        }
+
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            uploadFiles(files).finally(() => { e.target.value = ''; });
+        }
+
+        async function deleteDoc(id, btn) {
+            if (!confirm('Remove this document and its chunks from the knowledge graph? The source file will also be deleted.')) return;
+            if (btn) btn.disabled = true;
+            try {
+                const res = await api('DELETE', '/documents/' + encodeURIComponent(id));
+                showToast(`Removed ${res.removed_chunks} chunks and ${res.removed_concepts} orphaned concepts.`, 'success');
+                state.graphLoaded = false;
+                await loadDocuments();
+                refreshStats();
+                if (state.activeTab === 'graph') loadGraph();
+            } catch (err) {
+                showToast(err.message, 'error');
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        // Drag & drop on the drop zone
+        (function setupDropZone() {
+            const zone = document.getElementById('drop-zone');
+            ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, (e) => {
+                e.preventDefault(); zone.classList.add('border-quantum-400');
+            }));
+            ['dragleave', 'drop'].forEach(ev => zone.addEventListener(ev, (e) => {
+                e.preventDefault(); zone.classList.remove('border-quantum-400');
+            }));
+            zone.addEventListener('drop', (e) => uploadFiles(e.dataTransfer.files));
+        })();
+
+        /* ==========================================================================
+           6. MODALS / SYSTEM
+           ========================================================================== */
+        function triggerApiLogModal() {
+            document.getElementById('modal-api-logs').classList.remove('hidden');
+            document.getElementById('api-log-badge').classList.add('hidden');
+        }
+        function closeApiLogModal() { document.getElementById('modal-api-logs').classList.add('hidden'); }
+
+        function resetSystemData() {
+            if (!confirm('Clear the chat and reload graph data from the server? (Your documents and graph are not deleted.)')) return;
+            clearChatHistory();
+            state.apiLogs = [];
+            document.getElementById('api-log-container').innerHTML = '';
+            state.nodes = []; state.links = []; nodeIndex = new Map();
+            closeGraphInspector();
+            recenterGraphCanvas();
+            refreshStats();
+            if (state.activeTab === 'graph') loadGraph();
+            if (state.activeTab === 'docs') loadDocuments();
+            showToast('View reset.', 'success');
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { closeAddNodeModal(); closeApiLogModal(); }
+        });
+
+        window.addEventListener('resize', () => {
+            if (state.activeTab === 'graph') initOrResizeGraphCanvas();
+        });
+
+        /* Boot */
+        checkHealth();
+        refreshStats();
+        setInterval(checkHealth, 15000);
+    </script>
+</body>
+</html>

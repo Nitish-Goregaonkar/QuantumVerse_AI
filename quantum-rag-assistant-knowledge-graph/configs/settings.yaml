@@ -1,0 +1,39 @@
+# Quantum RAG Assistant — Application Settings
+
+app:
+  name: "Quantum RAG Assistant"
+  version: "1.0.0"
+  description: "AI-powered Quantum Computing tutor using RAG"
+
+llm:
+  provider: "groq"           
+  model: "openai/gpt-oss-120b"
+  max_tokens: 1024
+  temperature: 0.1                
+
+embeddings:
+  model: "all-MiniLM-L6-v2"      
+  batch_size: 64
+
+retrieval:
+  top_k: 5
+  similarity_threshold: 0.3
+  chunk_size: 512
+  chunk_overlap: 64
+  strategy: "paragraph"           
+
+paths:
+  data_raw: "data/raw"
+  data_processed: "data/processed"
+  embeddings: "data/embeddings"
+  knowledge_graph: "data/knowledge_graph/knowledge_graph.json"
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1
+  reload: true
+  log_level: "INFO"
+
+ui:
+  served_by: "fastapi"   # web interface at http://localhost:8000/

@@ -1,0 +1,4 @@
+# Optional: install to render algorithm circuits using Qiskit's circuit drawer.
+-r requirements.txt
+qiskit>=1.2.0
+pylatexenc>=2.10
